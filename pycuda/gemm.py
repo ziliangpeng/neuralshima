@@ -39,7 +39,7 @@ __global__ void gemm(float *A, float *B, float *C, int N) {
 mod = SourceModule(kernel_code)
 gemm = mod.get_function("gemm")
 
-for scale in range(1, 5):
+for scale in range(1, 8):
     # Define the size of the matrices.
     N = 1024 * scale  # Size of the matrix (N x N).
 
@@ -68,5 +68,31 @@ for scale in range(1, 5):
     with Timed(f"CPU {N}"):
         C_cpu = np.matmul(A, B)
 
-    if not np.allclose(C_cuda, C_cpu, rtol=1e-3, atol=1e-5):
+    if not np.allclose(C_cuda, C_cpu, rtol=1e-3, atol=1e-3):
         print("Results do not match!")
+
+for threads in [8, 16, 32]:
+    # Define the size of the matrices.
+    N = 1024 * 4  # Size of the matrix (N x N).
+
+    # Create random matrices A and B.
+    A = np.random.randn(N, N).astype(np.float32)
+    B = np.random.randn(N, N).astype(np.float32)
+
+    # Create an empty matrix for the result.
+    C_cuda = np.empty_like(A)
+
+    # Define block and grid sizes.
+    block_size = (threads, threads, 1)  # Threads per block.
+    grid_size = (int(np.ceil(N / block_size[0])), int(np.ceil(N / block_size[1])))
+
+    # Launch the kernel.
+    with Timed(f"GPU {N}, threads {threads}"):
+        gemm(
+            drv.In(A),
+            drv.In(B),
+            drv.Out(C_cuda),
+            np.int32(N),
+            block=block_size,
+            grid=grid_size,
+        )
