@@ -1,6 +1,10 @@
 from pycuda.compiler import SourceModule
 
 # Define the CUDA kernel as a string.
+# Here, B is read column by column so it's not good for coalescing.
+# There are tricks to improve, like:
+#    - shared memory and tiling (process a small tile each time)
+#    - transpose B
 gemm_kernel = """
 __global__ void gemm(float *A, float *B, float *C, int N, int cnt = 1) {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
