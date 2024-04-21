@@ -2,7 +2,7 @@ import pycuda.autoinit
 import pycuda.driver as drv
 import numpy as np
 from timer import Timed
-from gemm import gemm_fn
+from gemm_kernel import gemm_fn
 
 for threads in [8, 16, 32]:
     # Define the size of the matrices.

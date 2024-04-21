@@ -3,7 +3,7 @@ import pycuda.driver as drv
 import numpy as np
 
 from timer import Timed
-from gemm import gemm_fn
+from gemm_kernel import gemm_fn
 
 
 for scale in range(1, 8):
