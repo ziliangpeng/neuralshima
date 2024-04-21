@@ -1,3 +1,3 @@
 #!/bin/bash
 
-nvcc gemm.cu; time nvprof ./a.out
+nvcc gemm_main.cu; time nvprof ./a.out
