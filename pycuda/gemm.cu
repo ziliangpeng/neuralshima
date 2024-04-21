@@ -3,13 +3,16 @@
 #include <chrono>
 
 // CUDA kernel for matrix multiplication (GEMM)
-__global__ void matrixMultiply(float *A, float *B, float *C, int numARows, int numAColumns, int numBColumns) {
+__global__ void matrixMultiply(float *A, float *B, float *C, int numARows, int numAColumns, int numBColumns)
+{
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (row < numARows && col < numBColumns) {
+    if (row < numARows && col < numBColumns)
+    {
         float sum = 0.0f;
-        for (int i = 0; i < numAColumns; ++i) {
+        for (int i = 0; i < numAColumns; ++i)
+        {
             sum += A[row * numAColumns + i] * B[i * numBColumns + col];
         }
         C[row * numBColumns + col] = sum;
@@ -17,7 +20,8 @@ __global__ void matrixMultiply(float *A, float *B, float *C, int numARows, int n
 }
 
 // Host function to run GEMM
-void gemm(float *h_A, float *h_B, float *h_C, int numARows, int numAColumns, int numBColumns) {
+void gemm(float *h_A, float *h_B, float *h_C, int numARows, int numAColumns, int numBColumns)
+{
     float *d_A, *d_B, *d_C;
 
     // Allocate device memory
@@ -94,7 +98,8 @@ void gemm(float *h_A, float *h_B, float *h_C, int numARows, int numAColumns, int
     }
 }
 
-int main() {
+int main()
+{
     int N = 1024;
     // Example usage:
     int numARows = N;
@@ -106,11 +111,11 @@ int main() {
     float *h_B = new float[numAColumns * numBColumns];
     float *h_C = new float[numARows * numBColumns];
 
-    // Initialize matrices A and B with some values
-    // ...
+// Initialize matrices A and B with some values
+// ...
 
-    // Perform GEMM
-    #include <chrono>
+// Perform GEMM
+#include <chrono>
 
     auto start = std::chrono::high_resolution_clock::now();
     gemm(h_A, h_B, h_C, numARows, numAColumns, numBColumns);
