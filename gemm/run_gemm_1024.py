@@ -27,6 +27,8 @@ with Timed("The entire process"):
             drv.In(B),
             drv.Out(C_cuda),
             np.int32(N),
+            np.int32(N),
+            np.int32(N),
             block=block_size,
             grid=grid_size,
         )

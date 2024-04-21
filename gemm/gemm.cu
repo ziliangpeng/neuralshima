@@ -67,7 +67,8 @@ void gemm(float *h_A, float *h_B, float *h_C, int numARows, int numAColumns, int
     }
 
     // Set grid and block sizes
-    dim3 threadsPerBlock(16, 16);
+    int threads = 16;
+    dim3 threadsPerBlock(threads, threads);
     dim3 blocksPerGrid((numBColumns + threadsPerBlock.x - 1) / threadsPerBlock.x,
                        (numARows + threadsPerBlock.y - 1) / threadsPerBlock.y);
 

@@ -5,18 +5,37 @@ from pycuda.compiler import SourceModule
 # There are tricks to improve, like:
 #    - shared memory and tiling (process a small tile each time)
 #    - transpose B
+
+# gemm_kernel = """
+# __global__ void gemm(float *A, float *B, float *C, int N, int cnt = 1) {
+#     int row = blockIdx.y * blockDim.y + threadIdx.y;
+#     int col = blockIdx.x * blockDim.x + threadIdx.x;
+#     float sum = 0;
+
+#     // TODO: implement a multi-mul
+#     if (row < N && col < N) {
+#         for (int k = 0; k < N; ++k) {
+#             sum += A[row * N + k] * B[k * N + col];
+#         }
+#         C[row * N + col] = sum;
+#     }
+# }
+# """
+
 gemm_kernel = """
-__global__ void gemm(float *A, float *B, float *C, int N, int cnt = 1) {
+__global__ void gemm(float *A, float *B, float *C, int numARows, int numAColumns, int numBColumns)
+{
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
-    float sum = 0;
 
-    // TODO: implement a multi-mul
-    if (row < N && col < N) {
-        for (int k = 0; k < N; ++k) {
-            sum += A[row * N + k] * B[k * N + col];
+    if (row < numARows && col < numBColumns)
+    {
+        float sum = 0.0f;
+        for (int i = 0; i < numAColumns; ++i)
+        {
+            sum += A[row * numAColumns + i] * B[i * numBColumns + col];
         }
-        C[row * N + col] = sum;
+        C[row * numBColumns + col] = sum;
     }
 }
 """
