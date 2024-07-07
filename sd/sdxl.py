@@ -4,7 +4,10 @@ from diffusers import DiffusionPipeline, StableDiffusionXLPipeline
 import torch
 from PIL import Image
 import time
+import statsd
 import click
+
+s = statsd.StatsClient("localhost", 8125)
 
 # Get current epoch second
 CURRENT_EPOCH_SECOND = int(time.time())
@@ -119,6 +122,7 @@ def main(ctx, refine, prompt, prompt_file):
     filename = f"{CURRENT_EPOCH_SECOND}_{suffix}.jpg"
     os.makedirs(directory, exist_ok=True)
     image.save(f"{directory}/{filename}")
+    s.incr(f"sd.sdxl.total_count")
 
 if __name__ == "__main__":
     main()
