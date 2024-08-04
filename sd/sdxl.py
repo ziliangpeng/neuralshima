@@ -17,6 +17,9 @@ gap = img_count - 1
 steps = math.ceil(STEPS / gap) * gap
 csteps = steps // gap
 
+num_images = 2
+batch_size = 2
+
 def san(p: str) -> str: return '_'.join(p.split())
 
 
@@ -93,36 +96,41 @@ def main(ctx, refine, prompt, prompt_file):
 
     if refine:
         high_noise_frac = 0.8
-        image = base(
+        images = base(
             prompt=prompt,
             num_inference_steps=steps,
             # callback=save_cb,
             # callback_steps=1,
             denoising_end=high_noise_frac,
             output_type="latent",
+            num_images_per_prompt=num_images,
+            batch_size=batch_size,
         ).images
-        image = refiner(
+        images = refiner(
             prompt=prompt,
             num_inference_steps=steps,
             denoising_start=high_noise_frac,
             image=image,
             # callback=save_cb,
             # callback_steps=1,
-        ).images[0]
+        ).images
     else:
-        image = base(
+        images = base(
             prompt=prompt,
             num_inference_steps=steps,
             # callback=save_cb,
             # callback_steps=1,
-        ).images[0]
+            num_images_per_prompt=num_images,
+            batch_size=batch_size,
+        ).images
 
-    suffix = get_suffix()
-    directory = "/tmp/sdxl/" + san(prompt)
-    filename = f"{CURRENT_EPOCH_SECOND}_{suffix}.jpg"
-    os.makedirs(directory, exist_ok=True)
-    image.save(f"{directory}/{filename}")
-    s.incr(f"sd.sdxl.total_count")
+    for i, image in enumerate(images):
+        suffix = get_suffix()
+        directory = "/tmp/sdxl/" + san(prompt)
+        filename = f"{CURRENT_EPOCH_SECOND}_{i}_{suffix}.jpg"
+        os.makedirs(directory, exist_ok=True)
+        image.save(f"{directory}/{filename}")
+        s.incr(f"sd.sdxl.total_count")
 
 if __name__ == "__main__":
     main()
