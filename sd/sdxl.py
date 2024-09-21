@@ -126,7 +126,7 @@ def main(ctx, refine, prompt, prompt_file):
 
     for i, image in enumerate(images):
         suffix = get_suffix()
-        directory = "/tmp/sdxl/" + san(prompt)
+        directory = "/tmp/sdxl-init/" + san(prompt)
         filename = f"{CURRENT_EPOCH_SECOND}_{i}_{suffix}.jpg"
         os.makedirs(directory, exist_ok=True)
         image.save(f"{directory}/{filename}")
