@@ -6,6 +6,7 @@ from transformers import GPT2Tokenizer, GPT2LMHeadModel
 import os
 import argparse
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 # Define a custom dataset
 class CustomTextDataset(Dataset):
@@ -45,6 +46,9 @@ def collate_fn(batch):
     return input_ids, attention_mask
 
 def main(data_folder):
+    # Initialize tensorboard writer
+    writer = SummaryWriter()
+
     # Initialize tokenizer and model
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     model = GPT2LMHeadModel.from_pretrained('gpt2')
@@ -62,6 +66,7 @@ def main(data_folder):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 
+    global_step = 0
     for epoch in range(num_epochs):
         model.train()
         total_loss = 0
@@ -79,23 +84,35 @@ def main(data_folder):
             total_loss += loss.item()
             progress_bar.set_postfix({'loss': f'{loss.item():.4f}'})
 
+            # Log loss to tensorboard
+            writer.add_scalar('Training/Loss', loss.item(), global_step)
+            global_step += 1
+
         avg_loss = total_loss / len(dataloader)
         print(f"Epoch {epoch+1}/{num_epochs}, Average Loss: {avg_loss:.4f}")
+
+        # Log average loss for the epoch
+        writer.add_scalar('Training/Epoch_Loss', avg_loss, epoch)
 
         # Generate a sample text after each epoch
         model.eval()
         with torch.no_grad():
             sample_input = tokenizer.encode("The quick brown fox", return_tensors="pt").to(device)
             sample_output = model.generate(sample_input, max_length=50, num_return_sequences=1, temperature=0.7)
+            generated_text = tokenizer.decode(sample_output[0], skip_special_tokens=True)
             print("Sample generated text:")
-            print(tokenizer.decode(sample_output[0], skip_special_tokens=True))
+            print(generated_text)
             print()
+
+            # Log generated text to tensorboard
+            writer.add_text('Generated Text', generated_text, epoch)
 
     # Save the trained model
     model.save_pretrained('path/to/save/trained/model')
     tokenizer.save_pretrained('path/to/save/trained/model')
 
     print("Training completed and model saved.")
+    writer.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a GPT-2 model on a folder of text files.")
