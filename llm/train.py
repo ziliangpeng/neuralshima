@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-from transformers import GPT2Tokenizer, GPT2LMHeadModel
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config
 import os
 import argparse
 from tqdm import tqdm
@@ -22,7 +22,8 @@ class CustomTextDataset(Dataset):
             if filename.endswith('.txt'):
                 file_path = os.path.join(folder_path, filename)
                 with open(file_path, 'r', encoding='utf-8') as f:
-                    data.extend(f.read().split('\n'))
+                    # data.extend(f.read().split('\n'))
+                    data.append(f.read())
         return [text for text in data if text.strip()]  # Remove empty lines
 
     def __len__(self):
@@ -51,10 +52,17 @@ def main(data_folder):
 
     # Initialize tokenizer and model
     tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-    model = GPT2LMHeadModel.from_pretrained('gpt2')
+    
+    # Initialize model with random weights
+    # config = GPT2Config.from_pretrained('gpt2')
+    config = GPT2Config()
+    model = GPT2LMHeadModel(config)
+    
+    # Load weights from pretrained (commented out)
+    # model = GPT2LMHeadModel.from_pretrained('gpt2')
 
     # Set up dataset and dataloader
-    dataset = CustomTextDataset(data_folder, tokenizer)
+    dataset = CustomTextDataset(data_folder, tokenizer, max_length=1024)
     dataloader = DataLoader(dataset, batch_size=4, shuffle=True, collate_fn=collate_fn)
 
     # Set up optimizer and loss function
@@ -62,7 +70,7 @@ def main(data_folder):
     loss_fn = nn.CrossEntropyLoss()
 
     # Training loop
-    num_epochs = 5
+    num_epochs = 10
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 
@@ -97,8 +105,8 @@ def main(data_folder):
         # Generate a sample text after each epoch
         model.eval()
         with torch.no_grad():
-            sample_input = tokenizer.encode("The quick brown fox", return_tensors="pt").to(device)
-            sample_output = model.generate(sample_input, max_length=50, num_return_sequences=1, temperature=0.7)
+            sample_input = tokenizer.encode("Title:", return_tensors="pt").to(device)
+            sample_output = model.generate(sample_input, max_length=1024, num_return_sequences=1, temperature=0.7)
             generated_text = tokenizer.decode(sample_output[0], skip_special_tokens=True)
             print("Sample generated text:")
             print(generated_text)
