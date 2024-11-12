@@ -7,6 +7,7 @@ import os
 import argparse
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
+import time
 
 # Define a custom dataset
 class CustomTextDataset(Dataset):
@@ -59,7 +60,7 @@ def main(data_folder):
     model = GPT2LMHeadModel(config)
     
     # Load weights from pretrained (commented out)
-    # model = GPT2LMHeadModel.from_pretrained('gpt2')
+    model = GPT2LMHeadModel.from_pretrained('gpt2')
 
     # Set up dataset and dataloader
     dataset = CustomTextDataset(data_folder, tokenizer, max_length=1024)
@@ -70,11 +71,12 @@ def main(data_folder):
     loss_fn = nn.CrossEntropyLoss()
 
     # Training loop
-    num_epochs = 10
+    num_epochs = 20
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 
     global_step = 0
+    epoch_time = int(time.time())  # Get the current epoch time
     for epoch in range(num_epochs):
         model.train()
         total_loss = 0
@@ -115,9 +117,18 @@ def main(data_folder):
             # Log generated text to tensorboard
             writer.add_text('Generated Text', generated_text, epoch)
 
-    # Save the trained model
-    model.save_pretrained('path/to/save/trained/model')
-    tokenizer.save_pretrained('path/to/save/trained/model')
+        # Save the model weights for each epoch
+        save_path = f'checkpoints/{epoch_time}_{epoch+1}'
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        model.save_pretrained(save_path)
+        tokenizer.save_pretrained(save_path)
+        print(f"Saved model checkpoint: {save_path}")
+
+    # Save the final trained model
+    final_save_path = os.path.join('checkpoints', 'final')
+    os.makedirs(final_save_path, exist_ok=True)
+    model.save_pretrained(final_save_path)
+    tokenizer.save_pretrained(final_save_path)
 
     print("Training completed and model saved.")
     writer.close()
