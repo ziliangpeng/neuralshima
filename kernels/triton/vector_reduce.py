@@ -7,8 +7,7 @@ from triton.runtime.autotuner import autotune
 
 
 @triton.jit
-def add_kernel(x_ptr,  # *Pointer* to first input vector.
-               y_ptr,  # *Pointer* to second input vector.
+def reduce_kernel(x_ptr,  # *Pointer* to first input vector.
                output_ptr,  # *Pointer* to output vector.
                n_elements,  # Size of the vector.
                BLOCK_SIZE: tl.constexpr,  # Number of elements each program should process.
@@ -28,10 +27,9 @@ def add_kernel(x_ptr,  # *Pointer* to first input vector.
     # Load x and y from DRAM, masking out any extra elements in case the input is not a
     # multiple of the block size.
     x = tl.load(x_ptr + offsets, mask=mask)
-    y = tl.load(y_ptr + offsets, mask=mask)
-    output = x + y
-    # Write x + y back to DRAM.
-    tl.store(output_ptr + offsets, output, mask=mask)
+    output = tl.sum(x)
+    tl.atomic_add(output_ptr, output)
+    # tl.store(output_ptr, output)
 
 
 # Define a list of configurations to try
@@ -45,43 +43,42 @@ def add_kernel(x_ptr,  # *Pointer* to first input vector.
     key=['n_elements'],
 )
 @triton.jit
-def add_kernel_autotune(x_ptr, y_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
-    return add_kernel(x_ptr, y_ptr, output_ptr, n_elements, BLOCK_SIZE)
+def reduce_kernel_autotune(x_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
+    return reduce_kernel(x_ptr, output_ptr, n_elements, BLOCK_SIZE)
 
-def add(x: torch.Tensor, y: torch.Tensor):
+def reduce(x: torch.Tensor):
     # We need to preallocate the output.
-    output = torch.empty_like(x)
-    assert x.is_cuda and y.is_cuda and output.is_cuda
-    n_elements = output.numel()
+    output = torch.zeros(1, device='cuda')
+    assert x.is_cuda and output.is_cuda
+    n_elements = x.numel()
     # The SPMD launch grid denotes the number of kernel instances that run in parallel.
     # It is analogous to CUDA launch grids. It can be either Tuple[int], or Callable(metaparameters) -> Tuple[int].
     # In this case, we use a 1D grid where the size is the number of blocks:
     grid = lambda meta: (triton.cdiv(n_elements, meta['BLOCK_SIZE']), )
     # Using the autotuned kernel instead of the original one
-    add_kernel_autotune[grid](x, y, output, n_elements)
+    reduce_kernel_autotune[grid](x, output, n_elements)
     return output
 
 torch.manual_seed(0)
-size = 98432
+size = 30000000
 x = torch.rand(size, device='cuda')
-y = torch.rand(size, device='cuda')
 
 # Time PyTorch implementation
 torch.cuda.synchronize()  # Ensure GPU is synchronized before timing
 start = time.perf_counter()
-output_torch = x + y
+output_torch = torch.sum(x)
 torch.cuda.synchronize()  # Ensure GPU is done before stopping timer
 torch_time = (time.perf_counter() - start) * 1000  # Convert to milliseconds
 
 # Time Triton implementation
-output_triton = add(x, y)
+output_triton = reduce(x)
 triton_times = []
 for i in range(10):  # Run 10 times
     x = torch.rand(size, device='cuda')
-    y = torch.rand(size, device='cuda')
+    print(x)
     torch.cuda.synchronize()
     start = time.perf_counter()
-    output_triton = add(x, y)
+    output_triton = reduce(x)
     torch.cuda.synchronize()
     elapsed = (time.perf_counter() - start) * 1000  # Convert to milliseconds
     triton_times.append(elapsed)
@@ -89,7 +86,7 @@ for i in range(10):  # Run 10 times
 
     torch.cuda.synchronize()  # Ensure GPU is synchronized before timing
     start = time.perf_counter()
-    output_torch = x + y
+    output_torch = torch.sum(x)
     torch.cuda.synchronize()  # Ensure GPU is done before stopping timer
     torch_time = (time.perf_counter() - start) * 1000  # Convert to milliseconds
     print(f'Run {i+1}: {torch_time:.4f} ms')

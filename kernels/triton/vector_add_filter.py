@@ -30,8 +30,11 @@ def add_kernel(x_ptr,  # *Pointer* to first input vector.
     x = tl.load(x_ptr + offsets, mask=mask)
     y = tl.load(y_ptr + offsets, mask=mask)
     output = x + y
+
+    mask3 = output % 3 == 0
+    filtered_output = tl.where(mask3, output, 0)
     # Write x + y back to DRAM.
-    tl.store(output_ptr + offsets, output, mask=mask)
+    tl.store(output_ptr + offsets, filtered_output, mask=mask)
 
 
 # Define a list of configurations to try
@@ -62,14 +65,14 @@ def add(x: torch.Tensor, y: torch.Tensor):
     return output
 
 torch.manual_seed(0)
-size = 98432
-x = torch.rand(size, device='cuda')
-y = torch.rand(size, device='cuda')
+size = 300000000
+x = (torch.randint(-10000, 10000, (size,), device='cuda'))
+y = (torch.randint(-10000, 10000, (size,), device='cuda'))
 
 # Time PyTorch implementation
 torch.cuda.synchronize()  # Ensure GPU is synchronized before timing
 start = time.perf_counter()
-output_torch = x + y
+output_torch = torch.where((x + y) % 3 == 0, x + y, torch.zeros_like(x))
 torch.cuda.synchronize()  # Ensure GPU is done before stopping timer
 torch_time = (time.perf_counter() - start) * 1000  # Convert to milliseconds
 
@@ -77,8 +80,8 @@ torch_time = (time.perf_counter() - start) * 1000  # Convert to milliseconds
 output_triton = add(x, y)
 triton_times = []
 for i in range(10):  # Run 10 times
-    x = torch.rand(size, device='cuda')
-    y = torch.rand(size, device='cuda')
+    x = (torch.randint(-10000, 10000, (size,), device='cuda'))
+    y = (torch.randint(-10000, 10000, (size,), device='cuda'))
     torch.cuda.synchronize()
     start = time.perf_counter()
     output_triton = add(x, y)
@@ -89,7 +92,7 @@ for i in range(10):  # Run 10 times
 
     torch.cuda.synchronize()  # Ensure GPU is synchronized before timing
     start = time.perf_counter()
-    output_torch = x + y
+    output_torch = torch.where((x + y) % 3 == 0, x + y, torch.zeros_like(x))
     torch.cuda.synchronize()  # Ensure GPU is done before stopping timer
     torch_time = (time.perf_counter() - start) * 1000  # Convert to milliseconds
     print(f'Run {i+1}: {torch_time:.4f} ms')
@@ -103,3 +106,4 @@ print(output_torch)
 print(output_triton)
 print(f'The maximum difference between torch and triton is '
       f'{torch.max(torch.abs(output_torch - output_triton))}')
+print(torch.sum(output_torch))
