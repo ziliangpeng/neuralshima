@@ -4,10 +4,12 @@ import time
 from loguru import logger
 
 def cross_entropy(logits, label):
-    logits_softmax = F.softmax(logits, dim=-1)
     target = F.one_hot(torch.tensor([label]), num_classes=10)
+    logits_softmax = F.softmax(logits, dim=-1)
     loss = -torch.sum(torch.log(logits_softmax) * target)
     return loss
+
+
 
 
 def main():
@@ -18,7 +20,8 @@ def main():
     label = 0
     for i in range(1000000000):
         optimizer.zero_grad()
-        loss = cross_entropy(a, label)
+        b = a / 10.0
+        loss = cross_entropy(b, label)
         loss.backward()
         optimizer.step()
         if i % 1000000 == 0:
