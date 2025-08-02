@@ -105,7 +105,8 @@ class GPT(nn.Module):
 
 
 class Data:
-    def __init__(self):
+    def __init__(self, digits):
+        self.digits = digits
         self.char2tok = {}
         for i in range(10):
             self.char2tok[str(i)] = i
@@ -126,15 +127,29 @@ class Data:
 
 
     def next(self):
-        a = random.randint(100, 999)
-        b = random.randint(100, 999)
+        a = random.randint(10 ** (self.digits-1), 10 ** self.digits - 1)
+        b = random.randint(10 ** (self.digits-1), 10 ** self.digits - 1)
         s = f'{a} + {b} = {a + b:06d}'
         return [self.char2tok[c] for c in s]
 
+    def next_batch(self, batch_size):
+        inputs = []
+        targets = []
+        for i in range(batch_size):
+            d = self.next()
+            inputs.append(torch.tensor(d[:-1]).to(dv))
+            targets.append(torch.tensor(d[1:]).to(dv))
+        input = torch.stack(tuple(inputs), dim=0)
+        target = torch.stack(tuple(targets), dim=0)
+
+        return input, target
+
 
 def main():
+    digits = 3
+    batch_size = 32
 
-    dataloader = Data()
+    dataloader = Data(digits)
     # vocab_size, dim, n_heads, n_layers, seq_len):
     g = GPT(dataloader.vocab_size(), 256, 8, 8, 20)
     g = g.to(dv)
@@ -143,29 +158,20 @@ def main():
     # for p in g.parameters():
     #     print('--')
     #     print(p.shape)
-    sgd = torch.optim.Adam(params=list(g.parameters()), lr=4e-3)
+    input, target = dataloader.next_batch(batch_size)
+    sgd = torch.optim.Adam(params=list(g.parameters()), lr=3e-4)
     for it in range(1000000000):
-        inputs = []
-        targets = []
-        for i in range(16):
-            d = dataloader.next()
-            inputs.append(torch.tensor(d[:-1]).to(dv))
-            targets.append(torch.tensor(d[1:]).to(dv))
-            input = torch.stack(tuple(inputs), dim=0)
-            target = torch.stack(tuple(targets), dim=0)
-        # print(input)
-        # print(target)
         sgd.zero_grad()
         logits, loss = g(input, target)
         if it % 1000 == 0:
             # print(loss)
             with torch.no_grad():
-                print('total loss', torch.sum(loss[:, 9:]).item())
+                print('total loss', torch.sum(loss[:, digits*2+3:]).item())
             # print(torch.argmax(logits, dim=-1))
-            print('pred', dataloader.recover(torch.argmax(logits, dim=-1)))
-            print('true', dataloader.recover(target))
+            print('pred', [s[digits*2+3:] for s in dataloader.recover(torch.argmax(logits, dim=-1))])
+            print('true', [s[digits*2+3:] for s in dataloader.recover(target)])
             # print(g.blocks[0].attn.proj.weight[0][:4])
-        loss = loss[:, 9:]
+        loss = loss[:, digits*2+3:]
         mean_loss = torch.mean(loss)
         mean_loss.backward()
         sgd.step()
