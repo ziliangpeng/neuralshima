@@ -162,3 +162,5 @@ cython_debug/
 # cpp compiler output
 a.out
 .DS_Store
+
+test/
