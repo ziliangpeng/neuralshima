@@ -3,6 +3,7 @@ import random
 import torch
 from torch import nn
 import torch.nn.functional as F
+from loguru import logger
 
 dv = 'mps'
 
@@ -37,16 +38,65 @@ class MHAttention(nn.Module):
         v = v.view(B, T, self.n_heads, self.dim // self.n_heads).transpose(1, 2) # B, n_heads, T, head_dim
 
         qk = q @ k.transpose(-2, -1) / math.sqrt(k.size(-1))
-        qk.masked_fill(self.mask[:, :, :T, :T] == 0, float('-inf'))
+        qk = qk.masked_fill(self.mask[:, :, :T, :T] == 0, float('-inf'))
         att = F.softmax(qk, dim=-1) @ v # (B, n_heads, T, head_dim)
         att = att.transpose(1, 2).reshape(B, T, D)
         return self.proj2(att)
 
 class MQAttention(nn.Module):
-    pass
+    def __init__(self, dim, n_heads):
+        super().__init__()
+        self.n_heads = n_heads
+        self.dim = dim
+        self.head_dim = dim // n_heads
+        self.proj = nn.Linear(dim, dim + 2 * self.head_dim, device=dv)
+        self.proj2 = nn.Linear(dim, dim, device=dv)
+        self.register_buffer('mask', torch.tril(torch.ones(1024, 1024, device=dv)).unsqueeze(0).unsqueeze(0))
+
+    def forward(self, x):
+        B, T, D = x.shape
+        qkv = self.proj(x)
+        q = qkv[:, :, :self.dim]
+        k = qkv[:, :, self.dim:self.dim + self.head_dim].repeat(1, 1, self.n_heads)
+        v = qkv[:, :, self.dim + self.head_dim:].repeat(1, 1, self.n_heads)
+
+        q = q.view(B, T, self.n_heads, self.dim // self.n_heads).transpose(1, 2)
+        k = k.view(B, T, self.n_heads, self.dim // self.n_heads).transpose(1, 2)
+        v = v.view(B, T, self.n_heads, self.dim // self.n_heads).transpose(1, 2)
+
+        qk = q @ k.transpose(-2, -1) / math.sqrt(k.size(-1))
+        qk = qk.masked_fill(self.mask[:, :, :T, :T] == 0, float('-inf'))
+        att = F.softmax(qk, dim=-1) @ v # (B, n_heads, T, head_dim)
+        att = att.transpose(1, 2).reshape(B, T, D)
+        return self.proj2(att)
 
 class GQAttention(nn.Module):
-    pass
+    def __init__(self, dim, n_heads, n_kv_heads=8):
+        super().__init__()
+        self.n_heads = n_heads
+        self.dim = dim
+        self.n_kv_heads = n_kv_heads
+        self.head_dim = dim // n_heads
+        self.proj = nn.Linear(dim, dim + 2 * self.n_kv_heads * self.head_dim, device=dv)
+        self.proj2 = nn.Linear(dim, dim, device=dv)
+        self.register_buffer('mask', torch.tril(torch.ones(1024, 1024, device=dv)).unsqueeze(0).unsqueeze(0))
+
+    def forward(self, x):
+        B, T, D = x.shape
+        qkv = self.proj(x)
+        q = qkv[:, :, :self.dim]
+        k = qkv[:, :, self.dim:self.dim + self.n_kv_heads * self.head_dim].repeat_interleave(self.n_heads // self.n_kv_heads, dim=-1)
+        v = qkv[:, :, self.dim + self.n_kv_heads * self.head_dim:].repeat_interleave(self.n_heads // self.n_kv_heads, dim=-1)
+
+        q = q.view(B, T, self.n_heads, self.dim // self.n_heads).transpose(1, 2)
+        k = k.view(B, T, self.n_heads, self.dim // self.n_heads).transpose(1, 2)
+        v = v.view(B, T, self.n_heads, self.dim // self.n_heads).transpose(1, 2)
+
+        qk = q @ k.transpose(-2, -1) / math.sqrt(k.size(-1))
+        qk = qk.masked_fill(self.mask[:, :, :T, :T] == 0, float('-inf'))
+        att = F.softmax(qk, dim=-1) @ v # (B, n_heads, T, head_dim)
+        att = att.transpose(1, 2).reshape(B, T, D)
+        return self.proj2(att)
 
 class TransformerBlock(nn.Module):
     def __init__(self, dim, n_heads, att_type):
@@ -79,7 +129,9 @@ class TransformerBlock(nn.Module):
 class GPT(nn.Module):
     def __init__(self, vocab_size, dim, n_heads, n_layers, seq_len):
         super().__init__()
-        attn_type = 'mha'
+        # attn_type = 'mha'
+        # attn_type = 'mqa'
+        attn_type = 'gqa'
         self.vocab_size = vocab_size
         # Convert tensors to nn.Parameter so they get tracked by the optimizer
         self.pos_emb = nn.Parameter(torch.randn(seq_len, dim, device=dv))
@@ -169,6 +221,7 @@ def main():
     dataloader = Data(digits)
     # vocab_size, dim, n_heads, n_layers, seq_len):
     g = GPT(dataloader.vocab_size(), 256, 8, 8, 20)
+    # g = GPT(dataloader.vocab_size(), 1024, 8, 16, 20)
     g = g.to(dv)
 
     # print(len(list(g.parameters())))
@@ -183,10 +236,10 @@ def main():
         if it % 1000 == 0:
             # print(loss)
             with torch.no_grad():
-                print('total loss', torch.sum(loss[:, digits*2+3:]).item())
+                logger.info(f'total loss ({it}): {torch.sum(loss[:, digits*2+3:]):.2f}')
             # print(torch.argmax(logits, dim=-1))
-            print('pred', [s[digits*2+3:] for s in dataloader.recover(torch.argmax(logits, dim=-1))])
-            print('true', [s[digits*2+3:] for s in dataloader.recover(target)])
+            logger.info(f'pred: {dataloader.recover(torch.argmax(logits, dim=-1))}')
+            logger.info(f'true: {dataloader.recover(target)}')
             # print(g.blocks[0].attn.proj.weight[0][:4])
         loss = loss[:, digits*2+3:]
         mean_loss = torch.mean(loss)
