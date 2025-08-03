@@ -127,11 +127,8 @@ class TransformerBlock(nn.Module):
         # return x + self.mlp(self.ln2(x))
 
 class GPT(nn.Module):
-    def __init__(self, vocab_size, dim, n_heads, n_layers, seq_len):
+    def __init__(self, vocab_size, dim, n_heads, n_layers, seq_len, attn_type):
         super().__init__()
-        # attn_type = 'mha'
-        # attn_type = 'mqa'
-        attn_type = 'gqa'
         self.vocab_size = vocab_size
         # Convert tensors to nn.Parameter so they get tracked by the optimizer
         self.pos_emb = nn.Parameter(torch.randn(seq_len, dim, device=dv))
@@ -215,37 +212,57 @@ class Data:
 
 
 def main():
-    digits = 3
-    batch_size = 32
+    digits = 4
+    batch_size = 4
 
     dataloader = Data(digits)
     # vocab_size, dim, n_heads, n_layers, seq_len):
-    g = GPT(dataloader.vocab_size(), 256, 8, 8, 20)
+    gmh = GPT(dataloader.vocab_size(), 512, 8, 8, digits*2 + 3 + 3 + 10, 'mha')
+    ggq = GPT(dataloader.vocab_size(), 512, 8, 8, digits*2 + 3 + 3 + 10, 'gqa')
+    gmq = GPT(dataloader.vocab_size(), 512, 8, 8, digits*2 + 3 + 3 + 10, 'mqa')
     # g = GPT(dataloader.vocab_size(), 1024, 8, 16, 20)
-    g = g.to(dv)
+    gmh = gmh.to(dv)
+    ggq = ggq.to(dv)
+    gmq = gmq.to(dv)
 
     # print(len(list(g.parameters())))
     # for p in g.parameters():
     #     print('--')
     #     print(p.shape)
-    sgd = torch.optim.Adam(params=list(g.parameters()), lr=3e-4)
+    optmh = torch.optim.Adam(params=list(gmh.parameters()), lr=3e-4)
+    optgq = torch.optim.Adam(params=list(ggq.parameters()), lr=3e-4)
+    optmq = torch.optim.Adam(params=list(gmq.parameters()), lr=3e-4)
     for it in range(1000000000):
         input, target = dataloader.next_batch(batch_size)
-        sgd.zero_grad()
-        logits, loss = g(input, target)
-        if it % 1000 == 0:
+        optmh.zero_grad()
+        optgq.zero_grad()
+        optmq.zero_grad()
+        logitsmh, lossmh = gmh(input, target)
+        logitsgq, lossgq = ggq(input, target)
+        logitsmq, lossmq = gmq(input, target)
+        if it % 100 == 0:
             # print(loss)
             with torch.no_grad():
-                logger.info(f'total loss ({it}): {torch.sum(loss[:, digits*2+3:]):.2f}')
+                logger.info(f'total loss ({it}): {torch.sum(lossmh[:, digits*2+3:]):.9f}')
+                logger.info(f'total loss ({it}): {torch.sum(lossgq[:, digits*2+3:]):.9f}')
+                logger.info(f'total loss ({it}): {torch.sum(lossmq[:, digits*2+3:]):.9f}')
             # print(torch.argmax(logits, dim=-1))
-            logger.info(f'pred: {dataloader.recover(torch.argmax(logits, dim=-1))}')
-            logger.info(f'true: {dataloader.recover(target)}')
+            # logger.info(f'pred: {dataloader.recover(torch.argmax(logits, dim=-1))}')
+            # logger.info(f'true: {dataloader.recover(target)}')
             # print(g.blocks[0].attn.proj.weight[0][:4])
-        loss = loss[:, digits*2+3:]
-        mean_loss = torch.mean(loss)
-        mean_loss.backward()
-        sgd.step()
-    logits, loss = g(input, target)
+        lossmh = lossmh[:, digits*2+3:]
+        lossgq = lossgq[:, digits*2+3:]
+        lossmq = lossmq[:, digits*2+3:]
+        mean_lossmh = torch.mean(lossmh)
+        mean_lossgq = torch.mean(lossgq)
+        mean_lossmq = torch.mean(lossmq)
+        mean_lossmh.backward()
+        mean_lossgq.backward()
+        mean_lossmq.backward()
+        optmh.step()
+        optgq.step()
+        optmq.step()
+    # logits, loss = g(input, target)
     # print(torch.argmax(logits, dim=-1))
 
 main()
