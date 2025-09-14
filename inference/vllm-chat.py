@@ -39,6 +39,7 @@ def main():
         prompt = tok.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
+        print(prompt)
 
         # Generate response
         outputs = llm.generate([prompt], sampling_params)
@@ -51,5 +52,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # freeze_support()
     main()
